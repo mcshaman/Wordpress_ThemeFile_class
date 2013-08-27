@@ -1,54 +1,135 @@
-<?php
-// If in debug mode register uncompressed css and js files if available
-function dev_register_file( $type, $handle, $min_src, $deps = array(), $ver = false, $arg = false ) {
-	// Set default values
-	$suffix = 'min';
-	$style_type = 'style';
-	$script_type = 'script';
-	$src = $min_src;
+<?php 
+class ThemeFile {
+	private $type = false;
+	private $handle = false;
+	private $src = false;
+	private $defaults = array(
+		'deps'		=> array(),
+		'vers'		=> false,
+		'media'		=> 'all',
+		'in_footer'	=> false
+	);
 	
-	// Make sure required arguments are set
-	if( $type !== $style_type && $type !== $script_type ) { return; }
-	if( !is_string( $min_src ) ) { return; }
+	private $settings = array();
 	
-	// If not set set argument based on type variable
-	if( !isset( $arg ) ) {
-		if( $type === $style_type ) {
-			$arg = 'all';
-		} else {
-			$arg = false;
+	const MIN		= 'min';
+	const STYLE		= 'style';
+	const SCRIPT	= 'script';
+	
+	function __construct( $type, $handle, $src, $settings = array() ) {
+		
+		// Make arguments supplied are valid
+		if( !is_string( $type ) ) {
+			exit( '$type is an invalid argument' );
 		}
-	}
-	
-	if( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
-		
-		// Isolate path to file component from URL
-		$components = parse_url( $min_src );
-		$path = $components['path'];
-		
-		// Split the path into parts
-		$parts = pathinfo( $path );
-		
-		// Remove suffix from file name
-		$pattern = '/\.' . $suffix . '$/i';
-		$file_name = preg_replace( $pattern, '', $parts['filename'] );
-		
-		// Reassemble path
-		$path = $parts['dirname'] . '/' . $file_name . '.' . $parts['extension'];
-		
-		// If uncompressed css or js file exists set it as the source url
-		$target_path = $_SERVER['DOCUMENT_ROOT'] . $path;
-		if( file_exists( $target_path ) ) {
-			$src = $components['scheme'] . '://' . $components['host'] . $path;
+		if( !is_string( $handle ) ) {
+			exit( '$handle is an invalid argument' );
 		}
-	
+		if( !is_string( $src ) ) {
+			exit( '$src is an invalid argument' );
+		}
+		if( !is_array( $settings ) ) {
+			exit( '$settings is an invalid argument' );
+		}
+		
+		// Merge user supplied arguments with defaults
+		$this->type = $type;
+		$this->handle = $handle;
+		$this->src = $src;
+		$this->settings = array_merge( $this->defaults, $settings );
+		
+		// If script SCRIPT_DEBUG enabled look for development version of source file
+		if( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
+			$this->src = $this->dev_src( $src );
+		}
+		
+		$this->register();
 	}
 	
 	// Perform Wordpress file register 
-	if( $type === $style_type ) {
-		wp_register_style( $handle, $src, $deps, $ver, $arg );
-	} else {
-		wp_register_script( $handle, $src, $deps, $ver, $arg );
+	private function register() {
+		if( $this->type === self::STYLE ) {
+			wp_register_style( $this->handle, $this->src, $this->settings['deps'], $this->settings['vers'], $this->settings['media'] );
+		} else if ( $this->type === self::SCRIPT ) {
+			wp_register_script( $this->handle, $this->src, $this->settings['deps'], $this->settings['vers'], $this->settings['in_footer'] );
+		}
+	}
+	
+	// Run file enqueue function based on type 
+	public function enqueue( $safe = false ) {
+		if( $this->type === self::STYLE ) {
+			$this->enqueue_style( $safe );
+		} else if ( $this->type === self::SCRIPT ) {
+			$this->enqueue_script( $safe );
+		}
+	}
+	
+	// Perform Wordpress enqueue style
+	private function enqueue_style( $safe ) {
+		if( $safe && !$this->url_exists( $this->src ) ) {
+			return false;
+		}
+		wp_enqueue_style( $this->handle );
+	}
+	
+	// Perform Wordpress enqueue script
+	private function enqueue_script( $safe ) {
+		if( $safe && !$this->url_exists( $this->src ) ) {
+			return false;
+		}
+		wp_enqueue_script( $this->handle );
+	}
+	
+	// Check to see if URL exists
+	public function url_exists( $src ) {
+		
+		// Make arguments supplied are valid
+		if( !is_string( $src ) ) {
+			exit( '$src is an invalid argument' );
+		}
+		
+		// Isolate path to file from URL
+		$url_parts = parse_url( $src );
+		$path = $url_parts['path'];
+		
+		// Check if file exists from reassembled path
+		if( file_exists( $_SERVER['DOCUMENT_ROOT'] . $path ) ) {
+			return true;
+		} else {
+			return false;
+		}
+		
+	}
+	
+	// Return development version of source if exists
+	public function dev_src( $src ) {
+	
+		// Make arguments supplied are valid
+		if( !is_string( $src ) ) {
+			exit( '$src is an invalid argument' );
+		}
+		
+		// Isolate path to file component from URL
+		$url_parts = parse_url( $src );
+		$path = $url_parts['path'];
+		
+		// Split the path into parts
+		$path_parts = pathinfo( $path );
+		
+		// Remove suffix from file name
+		$pattern = '/\.' . self::MIN . '$/i';
+		$file_name = preg_replace( $pattern, '', $path_parts['filename'] );
+		
+		// Reassemble path
+		$dev_url = $url_parts['scheme'] . '://' . $url_parts['host'] . $path_parts['dirname'] . '/' . $file_name . '.' . $path_parts['extension'];
+		
+		// If developer version of source file exists set it as the source url
+		if( $this->url_exists( $dev_url ) ) {
+			return $dev_url;
+		} else {
+			return $src;
+		}
+		
 	}
 }
 ?>
