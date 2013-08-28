@@ -70,6 +70,7 @@ class ThemeFile {
 			return false;
 		}
 		wp_enqueue_style( $this->handle );
+		return true;
 	}
 	
 	// Perform Wordpress enqueue script
@@ -78,6 +79,28 @@ class ThemeFile {
 			return false;
 		}
 		wp_enqueue_script( $this->handle );
+		return true;
+	}
+	
+	// Enqueue and perform Wordpress localize script
+	public function localize( $object_name, $l10n, $safe = false ) {
+		
+		// Make arguments supplied are valid
+		if( !is_string( $object_name ) ) {
+			exit( '$object_name is an invalid argument' );
+		}
+		if( !is_array( $l10n ) ) {
+			exit( '$l10n is an invalid argument' );
+		}
+		if( !is_bool( $safe ) ) {
+			exit( '$safe is an invalid argument' );
+		}
+		
+		if( $this->type == self::SCRIPT ) {
+			if( $this->enqueue_script( $safe ) ) {
+				wp_localize_script( $this->handle, $object_name, $l10n );
+			}
+		}
 	}
 	
 	// Check to see if URL exists
