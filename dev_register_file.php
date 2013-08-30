@@ -1,53 +1,67 @@
 <?php 
-class ThemeFile {
-	private $type = false;
-	private $handle = false;
-	private $src = false;
+class ThemeFiles {
+
 	private $defaults = array(
+		'type'		=> false,
+		'handle'	=> false,
+		'src'		=> false,
 		'deps'		=> array(),
 		'vers'		=> false,
 		'media'		=> 'all',
 		'in_footer'	=> false
 	);
 	
-	private $settings = array();
+	private $files = array();
 	
 	const MIN		= 'min';
 	const STYLE		= 'style';
 	const SCRIPT	= 'script';
 	
-	function __construct( $type, $handle, $src, $settings = array() ) {
+	function __construct( $input, $handle, $src, $settings = array() ) {
 		
 		// Make arguments supplied are valid
-		if( !is_string( $type ) ) {
+		if( !is_string( $input ) && !is_array( $input ) ) {
 			exit( '$type is an invalid argument' );
 		}
-		if( !is_string( $handle ) ) {
-			exit( '$handle is an invalid argument' );
-		}
-		if( !is_string( $src ) ) {
-			exit( '$src is an invalid argument' );
-		}
-		if( !is_array( $settings ) ) {
-			exit( '$settings is an invalid argument' );
+		if( is_string( $input ) ) {
+			if( !is_string( $handle ) ) {
+				exit( '$handle is an invalid argument' );
+			}
+			if( !is_string( $src ) ) {
+				exit( '$src is an invalid argument' );
+			}
+			if( !is_array( $settings ) ) {
+				exit( '$settings is an invalid argument' );
+			}
 		}
 		
-		// Merge user supplied arguments with defaults
-		$this->type = $type;
-		$this->handle = $handle;
-		$this->src = $src;
-		$this->settings = array_merge( $this->defaults, $settings );
+		// If input argument is a string make passed arguments into a valid associative array
+		if( is_sting( $input ) ) {
+			$file = $this->defaults;
+			$file['type'] = $type;
+			$file['handle'] = $handle;
+			$file['src'] = $src;
+			$file = array_merge( $file, $settings );
+			array_push( $this->files, $file);
+		} else {
+			foreach( $input as $in ) {
+				array_push( $this->files, array_merge( $this->defaults, $in ) );
+			}
+		}
 		
-		// If script SCRIPT_DEBUG enabled look for development version of source file
+		// If script SCRIPT_DEBUG enabled try to set development version of source file
 		if( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
-			$this->src = $this->dev_src( $src );
+			foreach( $this->files as &$file ) {
+				$file['src'] = $this->get_dev( $file['src'] );
+			}
+			unset( $file );
 		}
 		
-		$this->register();
+		$this->register_files();
 	}
 	
-	// Perform Wordpress file register 
-	private function register() {
+	// Perform Wordpress file register on files 
+	private function register_files() {
 		if( $this->type === self::STYLE ) {
 			wp_register_style( $this->handle, $this->src, $this->settings['deps'], $this->settings['vers'], $this->settings['media'] );
 		} else if ( $this->type === self::SCRIPT ) {
@@ -56,7 +70,7 @@ class ThemeFile {
 	}
 	
 	// Run file enqueue function based on type 
-	public function enqueue( $safe = false ) {
+	public function enqueue( $handle = false, $safe = false ) {
 		if( $this->type === self::STYLE ) {
 			$this->enqueue_style( $safe );
 		} else if ( $this->type === self::SCRIPT ) {
@@ -125,7 +139,7 @@ class ThemeFile {
 	}
 	
 	// Return development version of source if exists
-	public function dev_src( $src ) {
+	public function get_dev( $src ) {
 	
 		// Make arguments supplied are valid
 		if( !is_string( $src ) ) {
